@@ -1,0 +1,54 @@
+{
+  "name": "@illuma/react-experimental",
+  "version": "0.1.0",
+  "description": "Experimental React adapter library for Illuma's dependency injection. Provides basic signal-based state management and components for DI interop.",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "typings": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./signals": {
+      "types": "./dist/signals.d.ts",
+      "import": "./dist/signals.js",
+      "require": "./dist/signals.cjs"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "test": "vitest run",
+    "test:badges": "vitest run --coverage && make-coverage-badge --report-path ./artifacts/coverage/coverage-summary.json --output-path ./badges/coverage.svg",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "@illuma/core": ">=1.6.0"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.3.15",
+    "@illuma/core": "^1.6.0",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/bun": "latest",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitest/coverage-v8": "^4.0.18",
+    "make-coverage-badge": "1.2.0",
+    "happy-dom": "^20.6.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  }
+}
