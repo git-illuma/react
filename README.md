@@ -1,6 +1,6 @@
 # Illuma React (Experimental)
 
-Experimental React adapter for (@illuma/core)[https://github.com/git-illuma/core] dependency injection container.
+Experimental React adapter for [@illuma/core](https://github.com/git-illuma/core) dependency injection container.
 This package provides React bindings for Illuma DI system and a lightweight signals implementation for state management.
 
 ## Features
