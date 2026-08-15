@@ -25,9 +25,13 @@ export function createComponent<P extends object>(
   Cmp: ComponentType<P>,
   providers?: Provider[],
 ): FunctionComponent<P> {
-  return (props: P) => (
+  const Scoped = (props: P) => (
     <ProviderGroup providers={providers}>
       <Cmp {...props} />
     </ProviderGroup>
   );
+
+  Scoped.displayName = `Scoped(${Cmp.displayName || Cmp.name || "Component"})`;
+
+  return Scoped;
 }

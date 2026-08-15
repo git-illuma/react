@@ -170,6 +170,8 @@ describe("useSignal Hook", () => {
 
       expect(renderSpy).toHaveBeenCalledTimes(1);
 
+      // A write always stores its value; `equal` only suppresses the
+      // notification, so each step below is compared to the one before it.
       act(() => {
         sig.set(1);
       });
@@ -182,6 +184,11 @@ describe("useSignal Hook", () => {
 
       act(() => {
         sig.set(3);
+      });
+      expect(renderSpy).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        sig.set(10);
       });
       expect(renderSpy).toHaveBeenCalledTimes(2);
     });
@@ -278,7 +285,7 @@ describe("useSignal Hook", () => {
       const computeSpy = vi.fn(() => a() + b());
       const sum = computed(computeSpy);
 
-      const baseCalls = 6;
+      const baseCalls = 1;
       const { result } = renderHook(() => useSignal(sum));
       expect(result.current).toBe(3);
       expect(computeSpy).toHaveBeenCalledTimes(baseCalls);
@@ -379,7 +386,7 @@ describe("useSignal Hook", () => {
       const computeSpy = vi.fn(() => a() + b());
       const sum = computed(computeSpy, { equal: (a, b) => Math.abs(a - b) <= 2 });
 
-      const baseCalls = 6;
+      const baseCalls = 1;
       const { result } = renderHook(() => useSignal(sum));
       expect(result.current).toBe(3);
       expect(computeSpy).toHaveBeenCalledTimes(baseCalls);
@@ -530,7 +537,7 @@ describe("useSignal Hook", () => {
         equal: (a, b) => Math.abs(a - b) < 2,
       });
 
-      const baseCalls = 5;
+      const baseCalls = 1;
       const { result } = renderHook(() => useSignal(linked));
       expect(result.current).toBe(2);
       expect(computeSpy).toHaveBeenCalledTimes(baseCalls);

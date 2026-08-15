@@ -1,6 +1,6 @@
 {
   "name": "@illuma/react-experimental",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Experimental React adapter library for Illuma's dependency injection. Provides basic signal-based state management and components for DI interop.",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -17,6 +17,11 @@
       "types": "./dist/signals.d.ts",
       "import": "./dist/signals.js",
       "require": "./dist/signals.cjs"
+    },
+    "./testkit": {
+      "types": "./dist/testkit.d.ts",
+      "import": "./dist/testkit.js",
+      "require": "./dist/testkit.cjs"
     }
   },
   "files": [
@@ -32,11 +37,13 @@
   },
   "peerDependencies": {
     "react": ">=18",
-    "@illuma/core": ">=1.6.0"
+    "@illuma/core": ">=2.5.0",
+    "@illuma/signals": ">=0.0.1"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.15",
-    "@illuma/core": "^1.6.0",
+    "@illuma/core": "file:../core",
+    "@illuma/signals": "file:../signals",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
     "@types/bun": "latest",

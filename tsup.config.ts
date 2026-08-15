@@ -4,6 +4,7 @@ export default defineConfig({
   entry: {
     index: "src/container/index.ts",
     signals: "src/signals/index.ts",
+    testkit: "src/testkit.tsx",
   },
   format: ["cjs", "esm"],
   dts: true,

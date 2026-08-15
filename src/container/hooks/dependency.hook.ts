@@ -4,18 +4,12 @@ import type {
   MultiNodeToken,
   NodeToken,
 } from "@illuma/core";
-import {
-  getInjectableToken,
-  InjectionError,
-  isInjectable,
-  isNodeBase,
-} from "@illuma/core";
 import { useDiContainer } from "./container.hook";
 
 /**
  * React hook to access a dependency from the DI container.
  * @param token - The token representing the dependency to retrieve. It can be a class constructor, a NodeToken, or a MultiNodeToken.
- * @param options - Optional injection options. If `optional` is set to true, the hook will return null instead of throwing an error if the dependency is not found.
+ * @param options - Optional injection options. `optional` yields null when nothing provides the token, `self` restricts the lookup to the nearest container, `skipSelf` starts it at the parent.
  * @returns The instance of the requested dependency, or null if not found and `optional` is true.
  *
  * Example usage:
@@ -64,16 +58,7 @@ export function useDependency<
 >(provider: N, options?: iNodeInjectorOptions) {
   const container = useDiContainer();
 
-  let token: any = provider;
-  if (isInjectable(provider)) token = getInjectableToken(provider);
-  if (!isNodeBase(token)) {
-    throw InjectionError.invalidProvider(JSON.stringify(token));
-  }
-
-  try {
-    return container.get(token as any);
-  } catch (e) {
-    if (options?.optional) return null as any;
-    throw e;
-  }
+  // Resolution, `optional` included, is the container's job. Catching here would
+  // turn a service whose constructor threw into a silent null.
+  return container.get(provider as any, options as any);
 }
