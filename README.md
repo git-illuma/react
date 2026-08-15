@@ -1,19 +1,32 @@
 # Illuma React (Experimental)
 
-Experimental React adapter for [@illuma/core](https://github.com/git-illuma/core) dependency injection container.
-This package provides React bindings for Illuma DI system and a lightweight signals implementation for state management.
+Experimental React adapter for the [@illuma/core](https://github.com/git-illuma/core)
+dependency injection container.
+
+The adapter's job is to make React's tree and the container's tree the same tree:
+a component subtree gets its own container, resolution walks upwards through
+React's context, and a container's lifetime is a mount. It also ships a one-hook
+bridge to [@illuma/signals](https://github.com/git-illuma/signals) so a service's
+state can drive a render.
 
 ## Features
-- **React Bindings** – Context-based dependency injection for React components
-- **Scope Support** – Create child containers for component sub-trees
-- **Signals** – Fine-grained reactivity system for state management
-- **React Hooks** – `useDependency` for DI and `useSignal` for state
+
+- **React bindings** – context-based dependency injection for React components
+- **Scopes** – child containers for a component subtree, disposed with it
+- **Lifecycle** – `onMount` / `onUnmount` hooks for services that own a resource
+- **Signals bridge** – `useSignal` subscribes a component to a signal
+- **Diagnostics** – opt-in reporting of providers nothing ever injected
+- **Testkit** – a container the test owns, with a ready-made wrapper
 
 ## Installation
 
 ```bash
-yarn add @illuma/react-experimental @illuma/core
+yarn add @illuma/react-experimental @illuma/core @illuma/signals
 ```
+
+All three peers are required. `@illuma/signals` is only used by the `/signals`
+entry point, but it is declared as a plain peer dependency, so a package manager
+will ask for it either way.
 
 Requires `@illuma/core` 2.5.0 or newer: scopes are built on the container's
 `weakParentLink` option, so that a container React builds during a render it later
@@ -21,9 +34,23 @@ throws away can be collected instead of being retained by its parent forever.
 
 ## Structure
 
-- `@illuma/react-experimental` – Dependency injection bindings and React integration
-- `@illuma/react-experimental/signals` – Signals implementation for state management outside of React's render cycle
-- `@illuma/react-experimental/testkit` – Container-backed wrapper for testing components
+- `@illuma/react-experimental` – dependency injection bindings and React integration
+- `@illuma/react-experimental/signals` – re-exports `@illuma/signals` and adds the `useSignal` hook
+- `@illuma/react-experimental/testkit` – container-backed wrapper for testing components
+
+## Example
+
+[`example/`](./example) is a small application that puts every section of this
+document into one tree — a root container, a scope per screen, a service that
+owns a subscription, signals rendered through `useSignal`, a subtree that
+rebinds one token, and a test that swaps that token for a fake. It builds, runs
+and tests:
+
+```bash
+bun run build                      # the package
+cd example && npx vite             # http://localhost:5175
+cd example && npx vitest run       # 6 tests
+```
 
 ## Setup
 
@@ -42,6 +69,10 @@ export const App = () => (
   </IllumaRoot>
 );
 ```
+
+Keep that array module-level. `providers` is read once, when the container is
+built; a fresh literal on every render would be silently ignored, and the
+adapter says so in development.
 
 ## Dependency Injection
 
@@ -122,6 +153,10 @@ export const Dashboard = () => (
 
 In this example, `FeatureSection` and its children will use `MockUserService`, while `Dashboard` and its children (`DashboardComponent`) will use the original `UserService`.
 
+Overriding means shadowing in a *child* container. Listing two providers for one
+token in the same container is an error, not a last-one-wins — which is worth
+knowing when you lay out a provider array you also intend to reuse in tests.
+
 ### Resolution Modifiers
 
 `useDependency` forwards the container's modifiers.
@@ -139,9 +174,13 @@ throws — a broken dependency is a bug, not an absent one.
 
 Two rules matter, and both come from the container rather than from React.
 
-**A constructor runs twice.** The container executes each factory once against proxy
-dependencies to measure the graph, then once for real. A constructor must therefore be
-pure: build fields, inject dependencies, and nothing else.
+**A constructor runs more than once.** The container executes each factory once
+against proxy dependencies to measure the graph, then once for real — and React
+is free to build a container it later discards, which buys another pair. Under
+`StrictMode` a provider's constructor is observed to run three times for the one
+instance that survives. The number is not a contract; the rule it forces is.
+A constructor may build fields and inject dependencies, and must cause nothing
+to happen.
 
 **Resources belong to the mount, not to the constructor.** React may render a component,
 build its container, and then discard the whole attempt without ever committing it — and
@@ -174,6 +213,85 @@ export const ClockService = makeInjectable(_ClockService);
 `onMount` runs when the group commits, `onUnmount` when it goes away. Hooks fire only for
 nodes registered in that same container, so a nested group never re-mounts its ancestors'.
 
+A service with hooks therefore needs two entries for one class. Provider arrays
+nest, so the pair can travel as a single exported constant:
+
+```ts
+export const clockProviders: Provider = [
+  ClockService,
+  { provide: LIFECYCLE_NODE, alias: ClockService },
+];
+```
+
+## Signals
+
+The reactivity engine is not part of this package. It lives in
+[@illuma/signals](https://github.com/git-illuma/signals), knows nothing about
+React, and is documented there — `signal`, `computed`, `linkedSignal`,
+`resource`, `external`, `untracked` and their options.
+
+What this package adds is the bridge, plus a re-export so you only need one
+import path in React code:
+
+```ts
+// both work; the second saves you a second dependency in the import list
+import { signal, computed } from '@illuma/signals';
+import { signal, computed } from '@illuma/react-experimental/signals';
+```
+
+### `useSignal`
+
+Subscribes a component to a signal and re-renders it when the value changes.
+Built on `useSyncExternalStore`, with the same read used as the server snapshot,
+so it is safe under `renderToString`.
+
+```tsx
+import { useSignal } from '@illuma/react-experimental/signals';
+import { useDependency } from '@illuma/react-experimental';
+
+export const Counter = () => {
+  const service = useDependency(CounterService);
+  const count = useSignal(service.count);
+  const double = useSignal(service.double);
+
+  return (
+    <div>
+      <div>{count} / {double}</div>
+      <button onClick={() => service.increment()}>+1</button>
+    </div>
+  );
+};
+```
+
+It takes a signal, not a value, and throws if handed anything else.
+
+### Where the state should live
+
+Put the signals on the service and keep derivations there too. React then
+subscribes to a finished value instead of recomputing one on every render, and
+the same state is reachable from code that has no component around it.
+
+```ts
+import { makeInjectable } from '@illuma/core';
+import { computed, signal } from '@illuma/signals';
+
+class _CounterService {
+  public readonly count = signal(0);
+  public readonly double = computed(() => this.count() * 2);
+
+  public increment() {
+    this.count.update((c) => c + 1);
+  }
+}
+
+export type CounterService = _CounterService;
+export const CounterService = makeInjectable(_CounterService);
+```
+
+Creating signals in a constructor or a field initializer is fine: they are
+values, not effects, and the copy built during the container's measuring pass is
+simply discarded.
+
 ## Server Rendering
 
 Effects never run on a server, so nothing there can own a container's lifetime. Build one
@@ -196,6 +314,9 @@ try {
 }
 ```
 
+No mount happens, so no `onMount` does either: a server render resolves services
+but takes none of the resources they own.
+
 ## Testing
 
 `createTestScope` builds a container the test owns, and returns a wrapper for
@@ -216,6 +337,23 @@ scope.destroy();
 
 The container outlives the tree, so it can still be inspected after an unmount.
 
+There is no `overrideProvider`: the test scope *is* a root container, and a
+container rejects a second provider for a token it already has. Spreading your
+application's whole provider list and appending an override will throw. Split
+the list instead, so the bindings a test replaces are not in the part it reuses:
+
+```ts
+export const appProviders: Provider[] = [Logger, UserService];
+export const platformProviders: Provider[] = [{ provide: ApiService, useClass: HttpApi }];
+export const rootProviders: Provider[] = [appProviders, platformProviders];
+```
+
+```ts
+const scope = createTestScope({
+  providers: [appProviders, { provide: ApiService, useClass: FakeApi }],
+});
+```
+
 ## Diagnostics
 
 Opt in during development to be told which providers nothing ever injected.
@@ -228,141 +366,3 @@ if (import.meta.env.DEV) enableReactDiagnostics();
 
 Output goes through `Illuma.setLogger`, sharing one control surface with the core's own
 diagnostics. It is a no-op in production builds.
-
-## Signals
-
-This package includes a lightweight signals implementation to manage state outside of React's render cycle effectively.
-
-### Creating Signals
-
-Signals can be created standalone:
-
-```typescript
-import { computed, signal } from '@illuma/react-experimental/signals';
-
-const count = signal(0);
-const double = computed(() => count() * 2);
-
-count.set(1);
-console.log(double()); // 2
-```
-
-Or as part of a service:
-
-```typescript
-import { makeInjectable } from '@illuma/core';
-import { computed, signal } from '@illuma/react-experimental/signals';
-
-class _CounterService {
-  public readonly count = signal(0);
-  public readonly double = computed(() => this.count() * 2);
-
-  public increment() {
-    this.count.update((c) => c + 1);
-  }
-}
-
-export const CounterService = makeInjectable(_CounterService);
-export type CounterService = ReturnType<typeof CounterService>;
-```
-
-Then inject and use in a component:
-
-```tsx
-import { useDependency } from '@illuma/react-experimental';
-import { useSignal } from '@illuma/react-experimental/signals';
-import { CounterService } from './services';
-
-export const Counter = () => {
-  const service = useDependency(CounterService);
-  const count = useSignal(service.count);
-  const double = useSignal(service.double);
-
-  return (
-    <div>
-      <div>Count: {count}</div>
-      <div>Double: {double}</div>
-      <button onClick={() => service.increment()}>Increment</button>
-    </div>
-  );
-};
-```
-
-### Using Signals in React
-
-Use the `useSignal` hook to subscribe to signal changes. The component will re-render only when the signal value changes.
-
-```tsx
-import { useSignal } from '@illuma/react-experimental/signals';
-
-export const Counter = () => {
-  const value = useSignal(count);
-
-  return (
-    <button onClick={() => count.update((v) => v + 1)}>
-      Count: {value}
-    </button>
-  );
-};
-```
-
-### Linked Signals
-
-`linkedSignal` creates a value that updates when dependencies change but can also be modified manually.
-Useful for form state that resets when a selection changes.
-
-```typescript
-import { linkedSignal, signal } from '@illuma/react-experimental/signals';
-
-const userId = signal(1);
-const userForm = linkedSignal(() => ({ id: userId(), name: '' }));
-
-// Updates when userId changes
-userId.set(2);
-console.log(userForm().id); // 2
-
-// Can be modified manually
-userForm.update((f) => ({ ...f, name: 'Alice' }));
-```
-
-## Integration Example
-
-Combining DI and Signals for efficient state management.
-
-```typescript
-// user.service.ts
-import { NodeInjectable } from '@illuma/core';
-import { computed, signal } from '@illuma/react-experimental/signals';
-
-@NodeInjectable()
-export class UserService {
-  public readonly user = signal({ name: 'Anonymous' });
-  public readonly invokeCount = signal(0);
-
-  public readonly displayName = computed(() =>
-    `${this.user().name} (Invoked ${this.invokeCount()} times)`,
-  );
-
-  public updateName(name: string) {
-    this.user.set({ name });
-    this.invokeCount.update((c) => c + 1);
-  }
-}
-```
-
-```tsx
-// user.component.tsx
-import { useDependency } from '@illuma/react-experimental';
-import { useSignal } from '@illuma/react-experimental/signals';
-
-export const UserBadge = () => {
-  const service = useDependency(UserService);
-  const name = useSignal(service.displayName);
-
-  return (
-    <div onClick={() => service.updateName('John')}>
-      {name}
-    </div>
-  );
-};
-```

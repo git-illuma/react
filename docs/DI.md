@@ -71,13 +71,30 @@ const Feature = createComponent(FeatureView, [FeatureService]);
 4. Children components now see the child container as their "nearest" container.
 5. When `ProviderGroup` unmounts, the child container is destroyed.
 
+## Lifetime
+
+A container's lifetime is a mount, and only a mount. React may render a
+component, build its container and discard the whole attempt without ever
+committing it, and it gives no callback when it does — so a service takes its
+resources in `onMount` and releases them in `onUnmount`, never in a constructor.
+The container also builds every provider more than once by design.
+
+Both rules, and what happens if you break them, are in
+[Writing Services](../README.md#writing-services).
+
 ## Reactivity
 
 Illuma services are standard TypeScript classes and exist **outside** of React's render cycle. Changing a property on a service does **not** trigger a re-render by default.
 
 To make components reactive to service state changes, you should use:
-1. **Signals** (provided by `@illuma/react-experimental/signals`)
+1. **Signals** — [`@illuma/signals`](https://github.com/git-illuma/signals), bridged into React by this package's `useSignal` hook
 2. External state managers (Zustand, MobX, etc.)
 3. `useSyncExternalStore` (if implementing custom observables)
 
-See [Signals Documentation](./SIGNALS.md) for the built-in reactivity solution.
+See [Signals in React](./SIGNALS.md) for the bridge.
+
+## A running version
+
+[`example/`](../example) is a small application built out of exactly these
+pieces — root container, screen scope, nested override, lifecycle hooks — that
+builds, runs and is covered by tests.

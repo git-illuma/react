@@ -1,0 +1,159 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1115;
+  --panel: #171a21;
+  --line: #262c38;
+  --text: #dfe3ea;
+  --muted: #8b93a3;
+  --accent: #6ea8fe;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--accent);
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.topbar nav {
+  display: flex;
+  gap: 6px;
+}
+
+.topbar button {
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font: inherit;
+}
+
+.topbar button.active {
+  color: var(--text);
+  border-color: var(--accent);
+}
+
+.clock {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+main {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 16px;
+  padding: 20px;
+  align-items: start;
+}
+
+.screen {
+  display: grid;
+  gap: 16px;
+}
+
+.panel {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 14px 16px;
+}
+
+.panel header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.panel h3 {
+  margin: 0;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+}
+
+.badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.badge-live {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.hint {
+  color: var(--muted);
+  margin: 8px 0;
+}
+
+.panel table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+}
+
+.panel td {
+  padding: 5px 0;
+  border-top: 1px solid var(--line);
+  font-variant-numeric: tabular-nums;
+}
+
+.panel td:last-child {
+  text-align: right;
+}
+
+.muted {
+  color: var(--muted);
+  text-align: center !important;
+}
+
+.nested {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.log ol {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: var(--muted);
+}
+
+.log li {
+  margin-bottom: 3px;
+}
+
+.probe strong {
+  color: var(--accent);
+  font-size: 18px;
+}
