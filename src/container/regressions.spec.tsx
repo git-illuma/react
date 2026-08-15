@@ -7,7 +7,7 @@ import {
 } from "@illuma/core";
 import { Illuma } from "@illuma/core/plugins";
 import { render } from "@testing-library/react";
-import { Activity } from "react";
+import { Activity, StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DiContext } from "./context";
 import { __resetReactDiagnostics, enableReactDiagnostics } from "./diagnostics";
@@ -15,6 +15,7 @@ import { useDiContainer } from "./hooks/container.hook";
 import { useDependency } from "./hooks/dependency.hook";
 import { LIFECYCLE_NODE } from "./lifecycle";
 import { IllumaRoot, ProviderGroup } from "./provider";
+import { ContainerScope, type ScopeOptions } from "./scope";
 import { childHookCount, flush } from "./test-utils";
 
 afterEach(() => {
@@ -314,6 +315,97 @@ describe("the providers-changed warning", () => {
     await flush();
 
     expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * A scope's container is weakly linked to its parent, which is the only reason
+ * it is safe to build one during a render React may throw away. The price of
+ * that link is that a discarded container never runs its destroy hooks, so it
+ * may only ever hold things that are free to drop.
+ */
+describe("eager instantiation", () => {
+  it("never fills a container React might discard", async () => {
+    let runs = 0;
+    const TOKEN = new NodeToken<string>("eager-token");
+
+    const view = render(
+      <StrictMode>
+        <IllumaRoot>
+          <ProviderGroup
+            {...({ instant: true } as ScopeOptions)}
+            providers={[
+              {
+                provide: TOKEN,
+                factory: () => {
+                  runs++;
+                  return "x";
+                },
+              },
+            ]}
+          >
+            <span>leaf</span>
+          </ProviderGroup>
+        </IllumaRoot>
+      </StrictMode>,
+    );
+    await flush();
+
+    // The core still runs a scan pass per container to measure the graph; what
+    // must not happen is a second, real construction nobody will ever destroy.
+    expect(runs).toBeLessThanOrEqual(2);
+
+    view.unmount();
+    await flush();
+    expect(runs).toBeLessThanOrEqual(2);
+  });
+});
+
+/**
+ * A render reads the container, then the deferred release of an earlier unmount
+ * destroys it, and only then does the commit arrive. React yields between the
+ * two whenever the update is a transition, so the microtask that destroys the
+ * container lands squarely in that gap. The rebuild on retain is invisible to
+ * the render that already ran, which is what the listeners are for.
+ */
+describe("a release that lands between a render and its commit", () => {
+  it("tells listeners that the container they read was replaced", async () => {
+    const scope = ContainerScope.create({});
+    const read = scope.getContainer();
+
+    scope.retain();
+    scope.release();
+    await flush();
+    expect(read.destroyed).toBe(true);
+
+    const woken = vi.fn();
+    scope.subscribe(woken);
+
+    scope.retain();
+
+    expect(woken).toHaveBeenCalledTimes(1);
+    expect(scope.getContainer()).not.toBe(read);
+    expect(scope.getContainer().destroyed).toBe(false);
+
+    scope.release();
+    await flush();
+  });
+
+  it("stays quiet when the container it read is still alive", async () => {
+    const scope = ContainerScope.create({});
+    const woken = vi.fn();
+    scope.subscribe(woken);
+
+    scope.retain();
+    scope.release();
+    scope.retain();
+    await flush();
+
+    expect(woken).not.toHaveBeenCalled();
+    expect(scope.getContainer().destroyed).toBe(false);
+
+    scope.release();
+    await flush();
   });
 });
 
