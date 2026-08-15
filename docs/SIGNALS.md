@@ -1,97 +1,83 @@
-# Signals
+# Signals in React
 
 Status: **Experimental**
 
-The `@illuma/react-experimental/signals` package provides a lightweight reactivity system integrated with React. It allows you to model state dependencies efficiently from injected dependencies (that live outside React render cycle) and update React components only when specific data changes.
+The reactivity engine is not part of this package. It is
+[`@illuma/signals`](https://github.com/git-illuma/signals): a standalone,
+framework-agnostic library, documented in its own README —
+`signal`, `computed`, `linkedSignal`, `resource`, `external`, `untracked`,
+equality options and the rest.
 
-## Core Primitives
+This package contributes two things and nothing else.
 
-### `signal<T>`
+## 1. A re-export
 
-A wrapper around a value that can notify interested consumers when that value changes.
+`@illuma/react-experimental/signals` re-exports everything from
+`@illuma/signals`, so React code needs one import path rather than two. Both of
+these are the same function:
 
-```typescript
+```ts
+import { signal } from '@illuma/signals';
 import { signal } from '@illuma/react-experimental/signals';
-
-const count = signal(0);
-
-// Read (dependency tracking)
-console.log(count()); 
-
-// Write
-count.set(5);
-
-// Update based on previous
-count.update(prev => prev + 1);
 ```
 
-### `computed<T>`
+`@illuma/signals` is a peer dependency of this package: the re-export does not
+bundle it, and the two never end up duplicated in a build.
 
-A read-only signal that derives its value from other signals. It automatically tracks dependencies and re-evaluates only when necessary.
-
-```typescript
-import { computed } from '@illuma/react-experimental/signals';
-
-const count = signal(1);
-const double = computed(() => count() * 2);
-
-console.log(double()); // 2
-count.set(2);
-console.log(double()); // 4
-```
-
-### `linkedSignal<T>`
-
-A hybrid signal that updates automatically when its source dependency changes, but can also be manually overridden.
-
-Useful for:
-- Form states that reset when selection changes
-- synced local state that can diverge
-
-```typescript
-import { linkedSignal } from '@illuma/react-experimental/signals';
-
-const userId = signal(1);
-
-// Default name is derived from ID
-const formState = linkedSignal(() => {
-  const id = userId();
-  return { id, name: `User ${id}` };
-});
-
-console.log(formState().name); // "User 1"
-
-// User edits form (override)
-formState.update((state) => ({ ...state, name: "Alice" }));
-console.log(formState().name); // "Alice"
-
-// Selection changes (reset)
-userId.set(2);
-console.log(formState().name); // "User 2" (Reset to computed value)
-```
-
-## React Integration
-
-### `useSignal<T>`
-
-A hook that bridges Signals with React using `useSyncExternalStore`. It subscribes the component to the signal and triggers a re-render when the signal emits a new value.
+## 2. `useSignal`
 
 ```tsx
+import { useDependency } from '@illuma/react-experimental';
 import { useSignal } from '@illuma/react-experimental/signals';
 
-const Counter = () => {
-  const value = useSignal(counterSignal);
-  return <div>{value}</div>;
+export const Counter = () => {
+  const service = useDependency(CounterService);
+  const count = useSignal(service.count);
+
+  return <button onClick={() => service.increment()}>{count}</button>;
 };
 ```
 
-## Internal Mechanics
+`useSignal(signal)` subscribes the component to a signal and returns its current
+value, re-rendering only when that value actually changes — "changes" meaning
+whatever the signal's equality function says it means.
 
-1. **Dependency Tracking**: 
-   When a `computed` or `linkedSignal` executes its function, it pushes itself onto a global context stack. Any signal read during that execution registers the active computation as a subscriber.
+Three things worth knowing:
 
-2. **Equality Checks**:
-   Signals use an equality check (default is `===` or shallow comparison) before notifying listeners. If `set(value)` is called with the same value, no updates propagate.
+- **It takes a signal, not a value.** `useSignal(service.count)`, not
+  `useSignal(service.count())`. Anything that is not a signal throws.
+- **It is safe on a server.** A signal reads synchronously off the server too,
+  so the hook passes the same read to `useSyncExternalStore` as its server
+  snapshot. Without that argument React refuses to render at all.
+- **It is a subscription, not ownership.** The signal belongs to whatever
+  created it — usually a service, whose lifetime is a container's, not a
+  component's. Unmounting the component unsubscribes; it does not reset state.
 
-3. **Lazy Evaluation**:
-   Computed signals attempt to be lazy. They track whether their dependencies are dirty and re-evaluate only when read or when dependencies push an update.
+## Where state should live
+
+Signals on the service, derivations on the service, components subscribing to
+the result:
+
+```ts
+class _CartService {
+  public readonly items = signal<Item[]>([]);
+  public readonly total = computed(() =>
+    this.items().reduce((sum, item) => sum + item.price, 0),
+  );
+
+  public add(item: Item) {
+    this.items.update((prev) => [...prev, item]);
+  }
+}
+```
+
+React then subscribes to a finished value instead of recomputing one on every
+render, and the same state is reachable from code that has no component around
+it — a route guard, a websocket handler, another service.
+
+Creating signals in a constructor or a field initializer is fine. They are
+values, not effects, so the copy built during the container's measuring pass is
+simply discarded. See [Writing Services](../README.md#writing-services) for what
+a constructor must *not* do.
+
+A working version of all of this is in [`example/`](../example).
