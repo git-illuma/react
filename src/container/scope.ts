@@ -7,8 +7,19 @@ import { reactDiagnosticsEnabled, trackProviderUsage } from "./diagnostics";
  * The container options a caller may set. `parent` and `weakParentLink` are
  * withheld because React owns both: the tree decides the parent, and a scope is
  * only safe to build during a render because the link is weak.
+ *
+ * `instant` is withheld because it contradicts that weak link. A weakly linked
+ * container that React discards is never destroyed — nothing observes that it
+ * became unreachable — so it may only ever hold what is free to drop. Eager
+ * instantiation fills a speculative container with live instances whose destroy
+ * hooks will never run. Build the container yourself and hand it to
+ * `<IllumaRoot container={...}>` when eager really is what you want; there its
+ * lifetime is yours and no render can throw it away.
  */
-export type ScopeOptions = Omit<iContainerOptions, "parent" | "weakParentLink">;
+export type ScopeOptions = Omit<
+  iContainerOptions,
+  "parent" | "weakParentLink" | "instant"
+>;
 
 export interface iScopeConfig {
   readonly parent?: NodeContainer;
@@ -155,8 +166,8 @@ export class ContainerScope {
     const { parent, providers, options } = this._config;
 
     const container = new NodeContainer({
-      instant: false,
       ...options,
+      instant: false,
       parent,
       weakParentLink: true,
     });
