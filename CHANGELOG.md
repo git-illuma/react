@@ -7,8 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Unreleased
 
+## 0.4.0 - 2026-08-16
 ### Fixed
-
 - A container now lives as long as the component that provides it, rather than as
   long as its effects. React tears effects down whenever a subtree stops being
   active, and `<Activity mode="hidden">` does that while keeping the subtree's
@@ -16,16 +16,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   everything they held, while React preserved the `useState` right beside them.
   Teardown now follows the scope itself, which React discards only when the
   subtree is really gone.
-
+  
   Three further defects fell out of the same root: a descendant re-rendering on
   its own inside a hidden subtree resolved against an already-destroyed container
   (`i300`), a nested group rebuilt onto a destroyed parent (`i304`), and both are
   unreachable now that nothing is destroyed while the scope lives.
-
+  
   `onMount` and `onUnmount` still bracket activity and fire on every hide and
   show; `LifecycleRef.beforeDestroy` now fires when the container is really going
   away rather than each time a tab was hidden.
-
+  
   One limitation survives this fix. A signal read through `useSignal` is served
   from the last value it announced, and nothing announces while React has the
   subscription detached. The first frame after a hidden subtree is revealed can
@@ -38,7 +38,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Illuma.setLogger` instead.
 
 ## 0.3.0 - 2026-08-16
-
 First published release. The package existed before this at `0.1.0` but was
 never released, so everything below is new to anyone installing it.
 
