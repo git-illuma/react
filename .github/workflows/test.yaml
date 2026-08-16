@@ -3,8 +3,6 @@ name: PR tests
 on:
   pull_request:
     types: [opened, synchronize]
-    paths:
-      - "src/**"
     branches:
       - main
 
@@ -29,3 +27,5 @@ jobs:
       # Run tests
       - name: Test
         run: bun run test
+        env:
+          NODE_OPTIONS: --expose-gc

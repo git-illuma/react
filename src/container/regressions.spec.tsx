@@ -4,6 +4,7 @@ import {
   NodeContainer,
   NodeToken,
   nodeInject,
+  type Provider,
 } from "@illuma/core";
 import { Illuma } from "@illuma/core/plugins";
 import { render } from "@testing-library/react";
@@ -417,5 +418,165 @@ describe("cross-bundle identity", () => {
     expect(g[Symbol.for("@illuma/react-experimental/LifecycleNode")]).toBe(
       LIFECYCLE_NODE,
     );
+  });
+});
+
+describe("a lifecycle node that throws on mount", () => {
+  it("unmounts the nodes that already mounted, instead of stranding them", () => {
+    const log: string[] = [];
+
+    class _Good {
+      public onMount(): void {
+        log.push("good.onMount");
+      }
+
+      public onUnmount(): void {
+        log.push("good.onUnmount");
+      }
+    }
+    const Good = makeInjectable(_Good);
+
+    class _Bad {
+      public onMount(): void {
+        throw new Error("mount boom");
+      }
+    }
+    const Bad = makeInjectable(_Bad);
+
+    const spy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    expect(() =>
+      render(
+        <IllumaRoot>
+          <ProviderGroup
+            providers={[
+              Good,
+              { provide: LIFECYCLE_NODE, alias: Good },
+              Bad,
+              { provide: LIFECYCLE_NODE, alias: Bad },
+            ]}
+          >
+            <span>leaf</span>
+          </ProviderGroup>
+        </IllumaRoot>,
+      ),
+    ).toThrow(/mount boom/);
+
+    spy.mockRestore();
+
+    expect(log).toEqual(["good.onMount", "good.onUnmount"]);
+  });
+});
+
+describe("provider diagnostics", () => {
+  it("sees through a nested provider array", async () => {
+    const warn = vi.fn();
+    Illuma.setLogger({ log: vi.fn(), warn, error: vi.fn() });
+    enableReactDiagnostics();
+
+    class _Unused {}
+    const Unused = makeInjectable(_Unused);
+    const grouped: Provider[] = [[Unused]];
+
+    const view = render(
+      <IllumaRoot>
+        <ProviderGroup providers={grouped}>
+          <span>leaf</span>
+        </ProviderGroup>
+      </IllumaRoot>,
+    );
+
+    view.unmount();
+    await flush();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("without ever injecting"));
+  });
+
+  it("does not accuse a lifecycle registration of being unused", async () => {
+    const warn = vi.fn();
+    Illuma.setLogger({ log: vi.fn(), warn, error: vi.fn() });
+    enableReactDiagnostics();
+
+    class _Clock {
+      public onMount(): void {}
+      public onUnmount(): void {}
+    }
+    const Clock = makeInjectable(_Clock);
+
+    function Leaf() {
+      useDependency(Clock);
+      return <span>leaf</span>;
+    }
+
+    const view = render(
+      <IllumaRoot>
+        <ProviderGroup providers={[Clock, { provide: LIFECYCLE_NODE, alias: Clock }]}>
+          <Leaf />
+        </ProviderGroup>
+      </IllumaRoot>,
+    );
+
+    view.unmount();
+    await flush();
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("the providers-changed warning", () => {
+  it("notices a swap between two different nested arrays", async () => {
+    const warn = vi.fn();
+    Illuma.setLogger({ log: vi.fn(), warn, error: vi.fn() });
+
+    const A = new NodeToken<string>("nested-a");
+    const B = new NodeToken<string>("nested-b");
+    const groupA: Provider[] = [[{ provide: A, factory: () => "a" }]];
+    const groupB: Provider[] = [[{ provide: B, factory: () => "b" }]];
+
+    const tree = (providers: Provider[]) => (
+      <IllumaRoot>
+        <ProviderGroup providers={providers}>
+          <span>leaf</span>
+        </ProviderGroup>
+      </IllumaRoot>
+    );
+
+    const view = render(tree(groupA));
+    await flush();
+    expect(warn).not.toHaveBeenCalled();
+
+    view.rerender(tree(groupB));
+    await flush();
+
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("`providers` changed"));
+  });
+
+  it("stays quiet when a root is handed a container it did not have before", async () => {
+    const warn = vi.fn();
+    Illuma.setLogger({ log: vi.fn(), warn, error: vi.fn() });
+
+    class _Svc {}
+    const Svc = makeInjectable(_Svc);
+
+    const own = new NodeContainer({ instant: false });
+    own.bootstrap();
+
+    const view = render(
+      <IllumaRoot providers={[Svc]}>
+        <span>leaf</span>
+      </IllumaRoot>,
+    );
+    await flush();
+
+    view.rerender(
+      <IllumaRoot container={own}>
+        <span>leaf</span>
+      </IllumaRoot>,
+    );
+    await flush();
+
+    expect(warn).not.toHaveBeenCalled();
+
+    own.destroy();
   });
 });

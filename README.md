@@ -191,12 +191,15 @@ constructor had opened would never be closed. Open it on mount instead.
 ```tsx
 import { makeInjectable } from '@illuma/core';
 import { LIFECYCLE_NODE } from '@illuma/react-experimental';
+import { signal } from '@illuma/react-experimental/signals';
 
 class _ClockService {
   private _timer?: ReturnType<typeof setInterval>;
 
+  public readonly seconds = signal(0);
+
   public onMount() {
-    this._timer = setInterval(() => this.tick(), 1000);
+    this._timer = setInterval(() => this.seconds.update((n) => n + 1), 1000);
   }
 
   public onUnmount() {

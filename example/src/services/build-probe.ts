@@ -20,11 +20,8 @@ let CONSTRUCTOR_RUNS = 0;
 class _BuildProbe {
   private readonly _log = nodeInject(EventLog);
 
-  public readonly runAtBuild: number;
-
   constructor() {
     CONSTRUCTOR_RUNS += 1;
-    this.runAtBuild = CONSTRUCTOR_RUNS;
   }
 
   public get constructorRuns(): number {

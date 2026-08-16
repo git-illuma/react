@@ -28,16 +28,8 @@ export default defineConfig({
   },
   server: { port: 5175, open: false },
   build: { outDir: "dist", emptyOutDir: true },
-  /**
-   * The odd `example-spec` suffix keeps this example's test out of the
-   * package's own `vitest run`, whose config declares no `include` and would
-   * otherwise pick up anything named `*.spec.tsx` anywhere in the repository —
-   * without the aliases above, so it could not resolve the adapter. Give the
-   * package's config `include: ["src/**\/*.spec.{ts,tsx}"]` and this can go
-   * back to being a plain `.spec.tsx`.
-   */
   test: {
     environment: "happy-dom",
-    include: ["src/**/*.example-spec.tsx"],
+    include: ["src/**/*.spec.tsx"],
   },
 });

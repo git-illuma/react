@@ -39,8 +39,8 @@ and `@illuma/signals` in a registry that does not have the required versions yet
 | [`src/services/build-probe.ts`](./src/services/build-probe.ts) | Counts its own constructor runs, so the "no side effects in a constructor" rule is a number on screen rather than an assertion in prose |
 | [`src/ui/feed-panel.tsx`](./src/ui/feed-panel.tsx) | `useDependency` + `useSignal`, and `skipSelf` reaching past the nearest container |
 | [`src/screens/about.screen.tsx`](./src/screens/about.screen.tsx) | `optional` against a token nothing provides |
-| [`src/ticker.screen.example-spec.tsx`](./src/ticker.screen.example-spec.tsx) | `createTestScope` with a fake source: mount subscribes, unmount releases, StrictMode does not double-subscribe |
-| [`src/server-render.example-spec.tsx`](./src/server-render.example-spec.tsx) | `IllumaRoot container={...}` on a server: renders, takes no resources, and is destroyed by the caller |
+| [`src/ticker.screen.spec.tsx`](./src/ticker.screen.spec.tsx) | `createTestScope` with a fake source: mount subscribes, unmount releases, StrictMode does not double-subscribe |
+| [`src/server-render.spec.tsx`](./src/server-render.spec.tsx) | `IllumaRoot container={...}` on a server: renders, takes no resources, and is destroyed by the caller |
 
 ## Things to try in the browser
 
@@ -64,15 +64,9 @@ nothing to happen.
 mount for every node, and the subscription count still settles at one. That is
 the whole reason resources live on `onMount` instead of in a constructor.
 
-## Two things that are scaffolding, not pattern
+## One thing that is scaffolding, not pattern
 
-Both exist because this example lives inside the package it demonstrates. Delete
-them when you copy it.
-
-- **The `resolve.alias` block in [`vite.config.ts`](./vite.config.ts).** It
-  points the three entry points at `../dist`. Once the package is installed from
-  a registry, plain resolution does the same job.
-- **The `example-spec` suffix on the test files.** The package's own
-  `vitest.config.ts` declares no `include`, so anything named `*.spec.tsx`
-  anywhere in the repository joins its test run — without these aliases, and so
-  unable to resolve the adapter. The suffix keeps the two suites apart.
+**The `resolve.alias` block in [`vite.config.ts`](./vite.config.ts)** points the
+three entry points at `../dist`, because this example lives inside the package it
+demonstrates. Once the package is installed from a registry, plain resolution
+does the same job — delete the block when you copy this.

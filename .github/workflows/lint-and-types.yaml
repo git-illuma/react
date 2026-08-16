@@ -2,16 +2,12 @@ name: Lint and Type Check
 
 on:
   push:
-    paths:
-      - "src/**"
     branches:
       - main
       - develop
 
   pull_request:
     types: [opened, synchronize]
-    paths:
-      - "src/**"
     branches:
       - main
       - develop

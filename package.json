@@ -2,6 +2,20 @@
   "name": "@illuma/react-experimental",
   "version": "0.2.0",
   "description": "Experimental React adapter library for Illuma's dependency injection. Provides basic signal-based state management and components for DI interop.",
+  "author": "bebrasmell",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/git-illuma/react"
+  },
+  "keywords": [
+    "react",
+    "dependency injection",
+    "di",
+    "ioc",
+    "signals",
+    "typescript"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -9,23 +23,49 @@
   "typings": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
     },
     "./signals": {
-      "types": "./dist/signals.d.ts",
-      "import": "./dist/signals.js",
-      "require": "./dist/signals.cjs"
+      "import": {
+        "types": "./dist/signals.d.ts",
+        "default": "./dist/signals.js"
+      },
+      "require": {
+        "types": "./dist/signals.d.cts",
+        "default": "./dist/signals.cjs"
+      }
     },
     "./testkit": {
-      "types": "./dist/testkit.d.ts",
-      "import": "./dist/testkit.js",
-      "require": "./dist/testkit.cjs"
+      "import": {
+        "types": "./dist/testkit.d.ts",
+        "default": "./dist/testkit.js"
+      },
+      "require": {
+        "types": "./dist/testkit.d.cts",
+        "default": "./dist/testkit.cjs"
+      }
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "signals": [
+        "./dist/signals.d.ts"
+      ],
+      "testkit": [
+        "./dist/testkit.d.ts"
+      ]
     }
   },
   "files": [
-    "dist"
+    "dist",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsup",

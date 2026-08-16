@@ -3,9 +3,9 @@ import { Illuma } from "@illuma/core/plugins";
 import type { ReactNode } from "react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { DiContext } from "./context";
-import { isProduction, providerToken } from "./diagnostics";
+import { isProduction, providerTokens } from "./diagnostics";
 import { useDiContainer } from "./hooks/container.hook";
-import { runLifecycleHook } from "./lifecycle";
+import { mountLifecycleNodes, unmountLifecycleNodes } from "./lifecycle";
 import { ContainerScope, type ScopeOptions } from "./scope";
 
 export interface ContainerProviderProps extends ScopeOptions {
@@ -46,7 +46,7 @@ function useScopedContainer(scope: ContainerScope): NodeContainer {
     // the container would never be destroyed and its teardown never run.
     const mounted = scope.getContainer();
     try {
-      runLifecycleHook(mounted, "onMount");
+      mountLifecycleNodes(mounted);
     } catch (error) {
       scope.release();
       throw error;
@@ -54,7 +54,7 @@ function useScopedContainer(scope: ContainerScope): NodeContainer {
 
     return () => {
       try {
-        if (!mounted.destroyed) runLifecycleHook(mounted, "onUnmount");
+        if (!mounted.destroyed) unmountLifecycleNodes(mounted);
       } finally {
         scope.release();
       }
@@ -69,18 +69,29 @@ function useScopedContainer(scope: ContainerScope): NodeContainer {
  * scope's container is built, exactly as a component's providers are in Angular
  * — a later change is silently ignored, so say so out loud in development.
  */
-function useProviderChangeWarning(providers: Provider[] | undefined): void {
+function useProviderChangeWarning(
+  providers: Provider[] | undefined,
+  scope: ContainerScope,
+): void {
   // Compared by the tokens the array binds, not by the array's own identity:
   // the documented shape puts an object literal inline, so identity differs on
-  // every render even when the set of providers is unchanged.
-  const initial = useRef<Array<object | null> | null>(null);
-  initial.current ??= (providers ?? []).map(providerToken);
+  // every render even when the set of providers is unchanged. The baseline is
+  // per scope, because a new scope means the providers were read again — and
+  // swapping `providers` for a `container` builds one, which is a legitimate
+  // change rather than an ignored one.
+  const initial = useRef<{ scope: ContainerScope; tokens: Array<object | null> } | null>(
+    null,
+  );
+
+  if (initial.current?.scope !== scope) {
+    initial.current = { scope, tokens: providerTokens(providers) };
+  }
 
   useEffect(() => {
     if (isProduction()) return;
 
-    const before = initial.current ?? [];
-    const after = (providers ?? []).map(providerToken);
+    const before = initial.current?.tokens ?? [];
+    const after = providerTokens(providers);
     if (before.length === after.length && before.every((t, i) => t === after[i])) return;
 
     Illuma.logger.warn(
@@ -121,7 +132,7 @@ export const ProviderGroup = ({
   }
 
   const container = useScopedContainer(current);
-  useProviderChangeWarning(providers);
+  useProviderChangeWarning(providers, current);
 
   return <DiContext.Provider value={container}>{children}</DiContext.Provider>;
 };
@@ -161,7 +172,7 @@ export const IllumaRoot = ({
   }
 
   const container = useScopedContainer(current);
-  useProviderChangeWarning(adopted ? undefined : providers);
+  useProviderChangeWarning(adopted ? undefined : providers, current);
 
   return <DiContext.Provider value={container}>{children}</DiContext.Provider>;
 };
