@@ -5,13 +5,13 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## Unreleased
 
+## 0.3.0 - 2026-08-16
 First published release. The package existed before this at `0.1.0` but was
 never released, so everything below is new to anyone installing it.
 
 ### Added
-
 - `IllumaRoot` and `ProviderGroup` bind a container to a React subtree, and
   `createComponent` wraps a component in one. Resolution walks upward through
   React's context, so the container tree and the component tree are the same
@@ -37,7 +37,6 @@ never released, so everything below is new to anyone installing it.
   tests that cover the server-rendering path.
 
 ### Changed
-
 - The signals engine moved out into [`@illuma/signals`](https://github.com/git-illuma/signals),
   which this package now depends on rather than duplicating. Its own copy had a
   separate `SIGNAL_SYMBOL`, so a signal from the package was unrecognisable to
@@ -50,7 +49,6 @@ never released, so everything below is new to anyone installing it.
 - Requires `@illuma/core` 2.5.0 or newer, which is where that weak link lives.
 
 ### Fixed
-
 - `useSignal` honours React's snapshot contract. It passed the signal itself as
   `getSnapshot`, and reading a signal does not promise a stable value between
   calls, so React reported an infinite render loop. The hook now serves the last

@@ -1,6 +1,6 @@
 {
   "name": "@illuma/react-experimental",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Experimental React adapter library for Illuma's dependency injection. Provides basic signal-based state management and components for DI interop.",
   "author": "bebrasmell",
   "license": "MIT",
