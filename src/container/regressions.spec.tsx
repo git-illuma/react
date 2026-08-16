@@ -8,7 +8,7 @@ import {
 } from "@illuma/core";
 import { Illuma } from "@illuma/core/plugins";
 import { render } from "@testing-library/react";
-import { Activity, StrictMode } from "react";
+import { Activity, StrictMode, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DiContext } from "./context";
 import { __resetReactDiagnostics, enableReactDiagnostics } from "./diagnostics";
@@ -17,7 +17,7 @@ import { useDependency } from "./hooks/dependency.hook";
 import { LIFECYCLE_NODE } from "./lifecycle";
 import { IllumaRoot, ProviderGroup } from "./provider";
 import { ContainerScope, type ScopeOptions } from "./scope";
-import { childHookCount, flush } from "./test-utils";
+import { childHookCount, collect, flush } from "./test-utils";
 
 afterEach(() => {
   __resetReactDiagnostics();
@@ -95,6 +95,86 @@ describe("Activity hide/show", () => {
 
     expect(view.container.textContent).toBe("o/i");
   });
+
+  it("keeps a hidden subtree's services and their state", async () => {
+    class _Draft {
+      public text = "";
+    }
+    const Draft = makeInjectable(_Draft);
+
+    const seen: _Draft[] = [];
+    function Editor() {
+      const draft = useDependency(Draft);
+      seen.push(draft);
+      return <span>{draft.text || "(empty)"}</span>;
+    }
+
+    const tree = (hidden: boolean) => (
+      <IllumaRoot>
+        <Activity mode={hidden ? "hidden" : "visible"}>
+          <ProviderGroup providers={[Draft]}>
+            <Editor />
+          </ProviderGroup>
+        </Activity>
+      </IllumaRoot>
+    );
+
+    const view = render(tree(false));
+    await flush();
+
+    seen[0].text = "half-typed answer";
+    view.rerender(tree(false));
+    await flush();
+    expect(view.container.textContent).toBe("half-typed answer");
+
+    view.rerender(tree(true));
+    await flush();
+    view.rerender(tree(false));
+    await flush();
+
+    // React preserves a hidden subtree's own state, so the services behind it
+    // have to survive too — anything else silently discards a half-filled form.
+    expect(view.container.textContent).toBe("half-typed answer");
+    expect(seen.at(-1)).toBe(seen[0]);
+  });
+
+  it("does not resolve against a destroyed container when a leaf re-renders while hidden", async () => {
+    const COUNT = new NodeToken<{ n: number }>("count");
+    let bump!: () => void;
+
+    function Leaf() {
+      const box = useDependency(COUNT);
+      const [n, setN] = useState(0);
+      bump = () => setN((v) => v + 1);
+      return <span>{box.n + n}</span>;
+    }
+
+    const tree = (hidden: boolean) => (
+      <IllumaRoot>
+        <Activity mode={hidden ? "hidden" : "visible"}>
+          <ProviderGroup providers={[{ provide: COUNT, factory: () => ({ n: 10 }) }]}>
+            <Leaf />
+          </ProviderGroup>
+        </Activity>
+      </IllumaRoot>
+    );
+
+    const view = render(tree(false));
+    await flush();
+    expect(view.container.textContent).toBe("10");
+
+    view.rerender(tree(true));
+    await flush();
+
+    // A descendant re-rendering on its own while hidden used to read a container
+    // the release had already destroyed.
+    expect(() => bump()).not.toThrow();
+    await flush();
+
+    view.rerender(tree(false));
+    await flush();
+    expect(view.container.textContent).toBe("11");
+  });
 });
 
 describe("a lifecycle hook that throws", () => {
@@ -117,13 +197,27 @@ describe("a lifecycle hook that throws", () => {
       </DiContext.Provider>,
     );
 
-    expect(() => unmount()).toThrow(/unmount boom/);
-    await flush();
+    const error = vi.fn();
+    Illuma.setLogger({ log: vi.fn(), warn: vi.fn(), error });
 
+    // Rethrowing out of a cleanup makes React retain the subtree, which would
+    // keep the scope alive and its container undestroyed for good.
+    expect(() => unmount()).not.toThrow();
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("unmount hook threw"),
+      expect.any(Error),
+    );
+
+    // Reading `.stack` materialises the trace; until then V8 keeps the captured
+    // frames, and one of them holds the container as an argument.
+    for (const [, thrown] of error.mock.calls) void (thrown as Error).stack;
+    error.mockReset();
+
+    await collect();
     expect(childHookCount(root)).toBe(0);
   });
 
-  it("still releases the scope when onMount throws", async () => {
+  it("surfaces a throwing onMount without tearing the parent down", () => {
     class _Bad {
       public onMount(): void {
         throw new Error("mount boom");
@@ -146,10 +240,13 @@ describe("a lifecycle hook that throws", () => {
       ),
     ).toThrow(/mount boom/);
 
-    await flush();
     spy.mockRestore();
 
-    expect(childHookCount(root)).toBe(0);
+    // The container is deliberately not asserted collected here. `render` threw,
+    // so nothing ever unmounted and React still holds the failed tree — that is
+    // React's retention, not the scope's. What this change owes is that the
+    // nodes which did mount get unmounted, which is pinned separately.
+    expect(root.destroyed).toBe(false);
   });
 
   it("does not let a destroy hook escape as an unhandled error", async () => {
@@ -181,7 +278,7 @@ describe("a lifecycle hook that throws", () => {
     );
 
     expect(() => unmount()).not.toThrow();
-    await flush();
+    await collect();
 
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining("destroy hook threw"),
@@ -376,7 +473,7 @@ describe("a release that lands between a render and its commit", () => {
 
     scope.retain();
     scope.release();
-    await flush();
+    scope.destroy();
     expect(read.destroyed).toBe(true);
 
     const woken = vi.fn();

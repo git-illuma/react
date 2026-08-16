@@ -5,9 +5,10 @@ dependency injection container.
 
 The adapter's job is to make React's tree and the container's tree the same tree:
 a component subtree gets its own container, resolution walks upwards through
-React's context, and a container's lifetime is a mount. It also ships a one-hook
-bridge to [@illuma/signals](https://github.com/git-illuma/signals) so a service's
-state can drive a render.
+React's context, and a container lives exactly as long as the component that
+provides it. It also ships a one-hook bridge to
+[@illuma/signals](https://github.com/git-illuma/signals) so a service's state can
+drive a render.
 
 ## Features
 
@@ -225,6 +226,38 @@ export const clockProviders: Provider = [
   { provide: LIFECYCLE_NODE, alias: ClockService },
 ];
 ```
+
+## How Long a Container Lives
+
+A container lives exactly as long as the component that provides it. Not as long
+as its effects: React tears effects down whenever a subtree stops being active,
+and `<Activity mode="hidden">` does that while deliberately keeping the subtree's
+state. A hidden tab keeps its `useState`, so it keeps its services too — hide one
+with a half-filled form in it, show it again, and the form is still there.
+
+```tsx
+<Activity mode={visible ? 'visible' : 'hidden'}>
+  <ProviderGroup providers={[DraftService]}>
+    <Editor />
+  </ProviderGroup>
+</Activity>
+```
+
+`onMount` and `onUnmount` still bracket *activity*, so they fire on every hide and
+show — which is what a resource wants. `LifecycleRef.beforeDestroy` fires when the
+container is really going away, once the component is gone for good.
+
+Teardown then happens when the collector reaches the discarded scope, so it is
+prompt but not synchronous. Where that matters — a server request, a test — build
+the container yourself and destroy it explicitly:
+`<IllumaRoot container={...}>` never destroys what it did not create.
+
+One thing to know about a hidden subtree: a signal read through `useSignal` is
+served from the last value it announced, and nothing announces while the
+subscription is detached. The first frame after a reveal can therefore show the
+value from when the subtree was hidden, corrected on the next commit. Reading the
+signal directly instead would break React's requirement that two snapshot reads
+agree, and that costs an infinite render loop rather than one extra frame.
 
 ## Signals
 

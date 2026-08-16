@@ -55,6 +55,11 @@ function useScopedContainer(scope: ContainerScope): NodeContainer {
     return () => {
       try {
         if (!mounted.destroyed) unmountLifecycleNodes(mounted);
+      } catch (error) {
+        // Rethrowing here corrupts the teardown: React keeps the whole subtree
+        // reachable, so the scope is never collected and its container is never
+        // destroyed. An error boundary cannot act on an unmount either.
+        Illuma.logger.error("[@illuma/react] An unmount hook threw.", error);
       } finally {
         scope.release();
       }

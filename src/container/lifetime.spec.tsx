@@ -7,7 +7,7 @@ import { useDiContainer } from "./hooks/container.hook";
 import { useDependency } from "./hooks/dependency.hook";
 import { LIFECYCLE_NODE } from "./lifecycle";
 import { IllumaRoot, ProviderGroup } from "./provider";
-import { childHookCount, flush } from "./test-utils";
+import { childHookCount, collect, flush } from "./test-utils";
 
 const log: string[] = [];
 
@@ -51,9 +51,9 @@ describe("scope lifetime", () => {
         </DiContext.Provider>,
       );
       unmount();
-      await flush();
     }
 
+    await collect();
     expect(childHookCount(root)).toBe(0);
   });
 
@@ -96,7 +96,7 @@ describe("scope lifetime", () => {
     expect((scoped as unknown as NodeContainer).destroyed).toBe(false);
 
     unmount();
-    await flush();
+    await collect();
 
     expect((scoped as unknown as NodeContainer).destroyed).toBe(true);
     expect(root.destroyed).toBe(false);

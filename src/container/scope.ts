@@ -27,6 +27,36 @@ export interface iScopeConfig {
   readonly options?: ScopeOptions;
 }
 
+/** What outlives a scope just long enough to tear its container down. */
+interface iTeardown {
+  container: NodeContainer;
+}
+
+/**
+ * Destroys a scope's container once the scope itself has been collected.
+ *
+ * The held value is a plain box and the callback closes over nothing: a held
+ * value that reaches its target keeps the target alive forever, which would
+ * mean the callback never runs at all.
+ */
+const SCOPE_TEARDOWN: FinalizationRegistry<iTeardown> | null =
+  typeof FinalizationRegistry === "undefined"
+    ? null
+    : new FinalizationRegistry<iTeardown>((teardown) => tearDown(teardown));
+
+function tearDown(teardown: iTeardown): void {
+  try {
+    if (!teardown.container.destroyed) teardown.container.destroy();
+  } catch (error) {
+    // Runs from a collection callback or an unmount microtask, where a throw
+    // escapes as an unhandled rejection no error boundary can catch.
+    Illuma.logger.error(
+      "[@illuma/react] A destroy hook threw while tearing down a scope.",
+      error,
+    );
+  }
+}
+
 /**
  * Owns a container on React's terms.
  *
@@ -36,15 +66,19 @@ export interface iScopeConfig {
  * which stops the parent from retaining it — and must be cheap to build, hence
  * lazy instantiation.
  *
- * Retention is counted rather than toggled, and release is deferred by a
- * microtask, so StrictMode's mount/unmount/mount cycle re-retains the scope
- * before the release ever runs.
+ * A container lives exactly as long as this object does, and this object lives
+ * in `useState`. That is deliberate, and it is the only way to tell React's two
+ * kinds of teardown apart: an effect cleanup means the subtree stopped being
+ * active, which `<Activity mode="hidden">` also does while keeping its state,
+ * whereas losing the state itself means the subtree is really gone. Destroying
+ * on the cleanup would throw away a hidden tab's services — and fire
+ * `beforeDestroy` for a container that is about to be shown again.
  */
 export class ContainerScope {
   private _container: NodeContainer;
   private _retainCount = 0;
-  private _releaseScheduled = false;
-  private _reportUsage: (() => void) | null = null;
+  private _report: (() => void) | null = null;
+  private readonly _teardown: iTeardown;
   private readonly _listeners = new Set<() => void>();
 
   /**
@@ -66,11 +100,14 @@ export class ContainerScope {
   ) {
     this.parent = _config.parent;
     this._container = container ?? this._build();
+    this._teardown = { container: this._container };
+
+    if (_owned) SCOPE_TEARDOWN?.register(this, this._teardown, this);
   }
 
   /**
-   * Creates a scope that owns its container and will destroy it once nothing
-   * retains it any more.
+   * Creates a scope that owns its container and will destroy it once the scope
+   * is gone.
    */
   public static create(config: iScopeConfig = {}): ContainerScope {
     return new ContainerScope(config, true);
@@ -85,21 +122,22 @@ export class ContainerScope {
   }
 
   /**
-   * The container to render with, rebuilt on the spot if a previous release
-   * already destroyed it.
+   * The container to render with.
    *
-   * Rebuilding has to happen here, on the read, rather than on the next commit.
-   * React re-renders a re-shown `<Activity>` subtree *before* running its
+   * Rebuilding, when it is needed at all, has to happen here rather than on the
+   * next commit: React re-renders a re-shown subtree *before* running its
    * effects, so a container revived in an effect would arrive one render too
-   * late and every `useDependency` in that first pass would resolve against a
-   * destroyed container. Reads are top-down, so a parent revived this way is
-   * already live by the time its children read it.
+   * late. Reads are top-down, so a parent revived this way is already live by
+   * the time its children read it.
    *
-   * Stable between rebuilds, as `useSyncExternalStore` requires: the result is
-   * cached in `_container` and only replaced when the old one is destroyed.
+   * Stable between rebuilds, as `useSyncExternalStore` requires.
    */
   public readonly getContainer = (): NodeContainer => {
-    if (this._owned && this._container.destroyed) this._container = this._build();
+    if (this._owned && this._container.destroyed) {
+      this._container = this._build();
+      this._teardown.container = this._container;
+    }
+
     return this._container;
   };
 
@@ -110,14 +148,8 @@ export class ContainerScope {
     };
   };
 
-  /**
-   * Marks one live mount and cancels a pending release. Revives the container
-   * too, for the narrow window where the deferred release fired between a render
-   * and its commit — that rebuild is not visible to the render that already
-   * happened, so listeners are told.
-   */
+  /** Marks one live mount, reviving the container if something destroyed it. */
   public retain(): void {
-    this._releaseScheduled = false;
     this._retainCount++;
 
     const previous = this._container;
@@ -127,39 +159,30 @@ export class ContainerScope {
   }
 
   /**
-   * Drops one live mount. The container is destroyed only if nothing retains it
-   * once the current task settles.
+   * Drops one live mount.
+   *
+   * The container is deliberately left alone. React runs this same cleanup when
+   * a subtree merely goes inactive, and only the collector can tell that apart
+   * from the subtree being gone for good.
+   *
+   * The usage report does fire here rather than at teardown: it is a note to
+   * whoever is looking at the console now, and waiting for a collection could
+   * mean it never arrives.
    */
   public release(): void {
     if (this._retainCount > 0) this._retainCount--;
-    if (this._retainCount > 0 || !this._owned) return;
+    if (this._retainCount > 0) return;
 
-    this._releaseScheduled = true;
-    queueMicrotask(() => {
-      if (!this._releaseScheduled) return;
-      this._releaseScheduled = false;
-      this.destroy();
-    });
+    this._report?.();
+    this._report = null;
   }
 
+  /** Tears the container down now, rather than waiting to be collected. */
   public destroy(): void {
     if (!this._owned) return;
 
-    try {
-      // The container may already be gone: a parent's destroy cascades down
-      // before this scope's own deferred release runs. Report either way.
-      if (!this._container.destroyed) this._container.destroy();
-    } catch (error) {
-      // This runs from a microtask on the unmount path, where a throw would
-      // escape as an unhandled rejection no error boundary can catch.
-      Illuma.logger.error(
-        "[@illuma/react] A destroy hook threw while tearing down a scope.",
-        error,
-      );
-    } finally {
-      this._reportUsage?.();
-      this._reportUsage = null;
-    }
+    SCOPE_TEARDOWN?.unregister(this);
+    tearDown(this._teardown);
   }
 
   private _build(): NodeContainer {
@@ -172,9 +195,9 @@ export class ContainerScope {
       weakParentLink: true,
     });
 
-    if (reactDiagnosticsEnabled()) {
-      this._reportUsage = trackProviderUsage(container, providers);
-    }
+    this._report = reactDiagnosticsEnabled()
+      ? trackProviderUsage(container, providers)
+      : null;
 
     if (providers?.length) container.provide(providers);
     container.bootstrap();
