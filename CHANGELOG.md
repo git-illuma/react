@@ -25,19 +25,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `onMount` and `onUnmount` still bracket activity and fire on every hide and
   show; `LifecycleRef.beforeDestroy` now fires when the container is really going
   away rather than each time a tab was hidden.
+
+  One limitation survives this fix. A signal read through `useSignal` is served
+  from the last value it announced, and nothing announces while React has the
+  subscription detached. The first frame after a hidden subtree is revealed can
+  therefore show the value from when it was hidden, corrected on the next commit.
+  Reading the signal directly instead would break React's requirement that two
+  snapshot reads agree, which costs an infinite render loop rather than one frame.
 - An unmount hook that throws no longer strands the container. Rethrowing out of
   an effect cleanup makes React retain the whole subtree, so the scope was never
   collected and its container never destroyed; the error is reported through
   `Illuma.setLogger` instead.
-
-### Known
-
-- A signal read through `useSignal` is served from the last value it announced,
-  and nothing announces while React has the subscription detached. The first
-  frame after a hidden subtree is revealed can therefore show the value from when
-  it was hidden, corrected on the next commit. Reading the signal directly
-  instead would break React's requirement that two snapshot reads agree, which
-  costs an infinite render loop rather than one frame.
 
 ## 0.3.0 - 2026-08-16
 
