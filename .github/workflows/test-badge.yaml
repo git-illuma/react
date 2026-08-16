@@ -14,11 +14,11 @@ jobs:
     steps:
       # Checkout
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
 
       # Setup bun
       - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
+        uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
       # Configure Git
