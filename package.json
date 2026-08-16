@@ -82,7 +82,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.15",
-    "@illuma/core": "file:../core",
+    "@illuma/core": "^2.5.0",
     "@illuma/signals": "file:../signals",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
